@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { useAuth, useUser, useClerk } from "@clerk/react";
+import { useAuth, useUser, useClerk } from "@clerk/react-router";
 import { LogOut, Car } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 

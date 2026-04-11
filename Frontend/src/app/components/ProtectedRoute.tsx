@@ -1,4 +1,4 @@
-import { useUser } from "@clerk/react";
+import { useUser } from "@clerk/react-router";
 import { Navigate } from "react-router";
 import { ReactNode } from "react";
 

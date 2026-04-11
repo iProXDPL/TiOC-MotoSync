@@ -1,4 +1,5 @@
-import { createBrowserRouter, Navigate, useRouteError, isRouteErrorResponse } from "react-router";
+import { createBrowserRouter, Navigate, useRouteError, isRouteErrorResponse, Outlet } from "react-router";
+import { ClerkProvider } from "@clerk/react-router";
 import { Root } from "./components/Root";
 import { SignIn } from "./components/SignIn";
 import { SignUp } from "./components/SignUp";
@@ -11,6 +12,16 @@ import { RepairHistory } from "./components/RepairHistory";
 import { RepairDetail } from "./components/RepairDetail";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Car } from "lucide-react";
+
+const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+function ClerkLayout() {
+  return (
+    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY}>
+      <Outlet />
+    </ClerkProvider>
+  );
+}
 
 function ErrorBoundary() {
   const error = useRouteError();
@@ -43,62 +54,66 @@ function ErrorBoundary() {
 
 export const router = createBrowserRouter([
   {
-    path: "/",
-    Component: Root,
-    errorElement: <ErrorBoundary />,
+    element: <ClerkLayout />,
     children: [
-      { index: true, element: <SelectRole /> },
-      { path: "sign-in/*", Component: SignIn },
-      { path: "sign-in/factor-one", Component: SignIn },
-      { path: "sign-up/*", Component: SignUp },
-      { path: "select-role", Component: SelectRole },
       {
-        path: "client",
-        element: (
-          <ProtectedRoute>
-            <ClientDashboard />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "mechanic",
-        element: (
-          <ProtectedRoute>
-            <MechanicDashboard />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "vehicles",
-        element: (
-          <ProtectedRoute>
-            <VehicleList />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "booking",
-        element: (
-          <ProtectedRoute>
-            <BookingForm />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "history",
-        element: (
-          <ProtectedRoute>
-            <RepairHistory />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "repair/:id",
-        element: (
-          <ProtectedRoute>
-            <RepairDetail />
-          </ProtectedRoute>
-        ),
+        path: "/",
+        Component: Root,
+        errorElement: <ErrorBoundary />,
+        children: [
+          { index: true, element: <SelectRole /> },
+          { path: "sign-in/*", Component: SignIn },
+          { path: "sign-up/*", Component: SignUp },
+          { path: "select-role", Component: SelectRole },
+          {
+            path: "client",
+            element: (
+              <ProtectedRoute>
+                <ClientDashboard />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "mechanic",
+            element: (
+              <ProtectedRoute>
+                <MechanicDashboard />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "vehicles",
+            element: (
+              <ProtectedRoute>
+                <VehicleList />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "booking",
+            element: (
+              <ProtectedRoute>
+                <BookingForm />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "history",
+            element: (
+              <ProtectedRoute>
+                <RepairHistory />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "repair/:id",
+            element: (
+              <ProtectedRoute>
+                <RepairDetail />
+              </ProtectedRoute>
+            ),
+          },
+        ],
       },
     ],
   },

@@ -1,4 +1,4 @@
-import { SignUp as ClerkSignUp } from "@clerk/react";
+import { SignUp as ClerkSignUp } from "@clerk/react-router";
 import { Car } from "lucide-react";
 
 export function SignUp() {

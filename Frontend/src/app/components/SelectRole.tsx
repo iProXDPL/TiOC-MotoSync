@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router";
-import { useAuth, useUser } from "@clerk/react";
+import { useAuth, useUser } from "@clerk/react-router";
 import { useEffect } from "react";
 
 export function SelectRole() {
