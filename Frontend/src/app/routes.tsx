@@ -99,11 +99,6 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
-      // Catch-all: redirect unknown paths to home
-      {
-        path: "*",
-        element: <Navigate to="/" replace />,
-      },
     ],
   },
 ]);
