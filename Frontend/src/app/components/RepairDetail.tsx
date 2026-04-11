@@ -1,14 +1,7 @@
 import { useNavigate, useParams } from "react-router";
 import { useEffect, useState } from "react";
-import {
-  getRepairById,
-  saveRepair,
-  getVehicleById,
-  getMessages,
-  saveMessage,
-  getUsers,
-} from "../utils/storage";
 import { useAppUser } from "../hooks/useAppUser";
+import { useApi } from "../hooks/useApi";
 import { Repair, RepairStatus, Message } from "../types";
 import {
   ArrowLeft,
@@ -44,7 +37,7 @@ export function RepairDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
   const user = useAppUser();
-  const [repair, setRepair] = useState<Repair | null>(null);
+  const [repair, setRepair] = useState<any | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [mechanicNotes, setMechanicNotes] = useState("");
@@ -52,6 +45,8 @@ export function RepairDetail() {
   const [estimatedCost, setEstimatedCost] = useState("");
   const [finalCost, setFinalCost] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
+
+  const api = useApi();
 
   useEffect(() => {
     if (!user || !id) {
@@ -62,71 +57,77 @@ export function RepairDetail() {
     loadRepair();
   }, [user, id, navigate]);
 
-  const loadRepair = () => {
+  const loadRepair = async () => {
     if (!id) return;
-    const repairData = getRepairById(id);
-    if (repairData) {
-      setRepair(repairData);
-      setMechanicNotes(repairData.mechanicNotes || "");
-      setAdditionalIssues(repairData.additionalIssues || "");
-      setEstimatedCost(repairData.estimatedCost?.toString() || "");
-      setFinalCost(repairData.finalCost?.toString() || "");
-      setScheduledDate(repairData.scheduledDate || "");
-      setMessages(getMessages(id));
+    try {
+      const data = await api.get(`/reports/${id}`);
+      setRepair(data);
+      setMechanicNotes(data.mechanicNotes || "");
+      setAdditionalIssues(data.additionalIssues || "");
+      setEstimatedCost(data.estimatedCost?.toString() || "");
+      setFinalCost(data.finalCost?.toString() || "");
+      
+      const parsedSchDate = data.scheduledDate ? new Date(data.scheduledDate).toISOString().split('T')[0] : "";
+      setScheduledDate(parsedSchDate);
+      
+      setMessages(data.messages || []);
+    } catch (err) {
+      console.error("Failed to load repair details:", err);
     }
   };
 
-  const handleStatusChange = (newStatus: RepairStatus) => {
+  const handleStatusChange = async (newStatus: RepairStatus) => {
     if (!repair) return;
 
-    const updated: Repair = {
-      ...repair,
-      status: newStatus,
-      updatedAt: new Date().toISOString(),
-      mechanicNotes,
-      additionalIssues,
-      scheduledDate,
-      estimatedCost: estimatedCost ? parseFloat(estimatedCost) : undefined,
-      finalCost: finalCost ? parseFloat(finalCost) : undefined,
-      completedDate: newStatus === "completed" ? new Date().toISOString() : repair.completedDate,
-    };
-
-    saveRepair(updated);
-    loadRepair();
+    try {
+      await api.put(`/reports/${id}/status`, {
+        status: newStatus,
+        mechanicNotes,
+        additionalIssues,
+        scheduledDate,
+        estimatedCost: estimatedCost ? parseFloat(estimatedCost) : undefined,
+        finalCost: finalCost ? parseFloat(finalCost) : undefined,
+        completedDate: newStatus === "completed" ? new Date().toISOString() : repair.completedDate,
+      });
+      if (newStatus === "completed" || newStatus === "cancelled") {
+        navigate(backPath);
+      } else {
+        loadRepair();
+      }
+    } catch (err) {
+      console.error("Failed to update status", err);
+    }
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!newMessage.trim() || !repair || !user) return;
 
-    const message: Message = {
-      id: `msg-${Date.now()}`,
-      repairId: repair.id,
-      senderId: user.id,
-      senderRole: user.role,
-      content: newMessage,
-      timestamp: new Date().toISOString(),
-    };
-
-    saveMessage(message);
-    setNewMessage("");
-    loadRepair();
+    try {
+      await api.post(`/reports/${id}/messages`, {
+        content: newMessage
+      });
+      setNewMessage("");
+      loadRepair();
+    } catch (err) {
+      console.error("Failed to send message", err);
+    }
   };
 
-  const handleUpdateDetails = () => {
+  const handleUpdateDetails = async () => {
     if (!repair) return;
 
-    const updated: Repair = {
-      ...repair,
-      mechanicNotes,
-      additionalIssues,
-      scheduledDate,
-      estimatedCost: estimatedCost ? parseFloat(estimatedCost) : undefined,
-      finalCost: finalCost ? parseFloat(finalCost) : undefined,
-      updatedAt: new Date().toISOString(),
-    };
-
-    saveRepair(updated);
-    loadRepair();
+    try {
+      await api.put(`/reports/${id}/details`, {
+        mechanicNotes,
+        additionalIssues,
+        scheduledDate,
+        estimatedCost: estimatedCost ? parseFloat(estimatedCost) : undefined,
+        finalCost: finalCost ? parseFloat(finalCost) : undefined,
+      });
+      loadRepair();
+    } catch (err) {
+      console.error("Failed to update details", err);
+    }
   };
 
   if (!repair) {
@@ -137,7 +138,7 @@ export function RepairDetail() {
     );
   }
 
-  const vehicle = getVehicleById(repair.vehicleId);
+  const vehicle = repair.carId;
   const isMechanic = user?.role === "mechanic";
   const backPath = isMechanic ? "/mechanic" : "/client";
 
@@ -156,16 +157,16 @@ export function RepairDetail() {
           <div className="flex items-start justify-between mb-4">
             <div>
               <h2 className="text-2xl font-bold text-neutral-900 dark:text-white mb-2">
-                {vehicle?.brand} {vehicle?.model}
+                {vehicle?.make} {vehicle?.model}
               </h2>
               <p className="text-sm text-neutral-600 dark:text-neutral-400">
                 {vehicle?.licensePlate} • VIN: {vehicle?.vin}
               </p>
             </div>
             <span
-              className={`px-3 py-1.5 text-sm font-medium rounded ${statusColors[repair.status]}`}
+              className={`px-3 py-1.5 text-sm font-medium rounded ${statusColors[repair.status as RepairStatus] || "bg-gray-100 text-gray-800"}`}
             >
-              {statusLabels[repair.status]}
+              {statusLabels[repair.status as RepairStatus] || repair.status}
             </span>
           </div>
 
@@ -182,15 +183,79 @@ export function RepairDetail() {
                   {new Date(repair.createdAt).toLocaleDateString("pl-PL")}
                 </p>
               </div>
-              <div>
-                <p className="text-xs text-neutral-500">Preferowany termin</p>
-                <p className="text-sm font-medium text-neutral-900 dark:text-white">
-                  {new Date(repair.requestedDate).toLocaleDateString("pl-PL")}
-                </p>
-              </div>
+              {repair.requestedDate && (
+                <div>
+                  <p className="text-xs text-neutral-500">Preferowany termin</p>
+                  <p className="text-sm font-medium text-neutral-900 dark:text-white">
+                    {new Date(repair.requestedDate).toLocaleDateString("pl-PL")}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
+
+        {!isMechanic && repair.status === "awaiting_approval" && (
+          <div className="bg-amber-50 dark:bg-amber-900/30 p-6 rounded-xl border-2 border-amber-400 dark:border-amber-600 shadow-lg shadow-amber-100 dark:shadow-amber-900/20">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-12 h-12 bg-amber-100 dark:bg-amber-800/50 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-amber-900 dark:text-amber-100 mb-1">
+                  Wymagana Twoja akceptacja
+                </h3>
+                <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
+                  Mechanik zgłosił zmiany wymagające Twojej zgody, zanim naprawa będzie kontynuowana:
+                </p>
+
+                <ul className="space-y-2 mb-5">
+                  {repair.additionalIssues && (
+                    <li className="flex items-start gap-2">
+                      <span className="mt-1.5 w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-400 flex-shrink-0" />
+                      <span className="text-sm text-amber-900 dark:text-amber-100">
+                        <strong>Wykryto dodatkowe usterki</strong> — podczas przeglądu znaleziono nowe problemy wymagające naprawy.
+                      </span>
+                    </li>
+                  )}
+                  {repair.estimatedCost && (
+                    <li className="flex items-start gap-2">
+                      <span className="mt-1.5 w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-400 flex-shrink-0" />
+                      <span className="text-sm text-amber-900 dark:text-amber-100">
+                        <strong>Zmiana kosztów naprawy</strong> — szacowany koszt wynosi teraz{" "}
+                        <span className="font-semibold">{Number(repair.estimatedCost).toFixed(2)} zł</span>.
+                      </span>
+                    </li>
+                  )}
+                  {!repair.additionalIssues && !repair.estimatedCost && (
+                    <li className="flex items-start gap-2">
+                      <span className="mt-1.5 w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-400 flex-shrink-0" />
+                      <span className="text-sm text-amber-900 dark:text-amber-100">
+                        Mechanik potrzebuje Twojej zgody na kontynuowanie prac. Sprawdź szczegóły poniżej.
+                      </span>
+                    </li>
+                  )}
+                </ul>
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => handleStatusChange("in_progress")}
+                    className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Akceptuję — kontynuuj naprawę
+                  </button>
+                  <button
+                    onClick={() => handleStatusChange("cancelled")}
+                    className="px-5 py-2.5 bg-white dark:bg-neutral-700 border border-red-300 dark:border-red-600 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 font-medium rounded-lg transition-colors"
+                  >
+                    Odrzuć — anuluj naprawę
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {isMechanic && (
           <div className="bg-white dark:bg-neutral-800 p-6 rounded-xl border border-neutral-200 dark:border-neutral-700">
@@ -241,7 +306,10 @@ export function RepairDetail() {
                   <input
                     type="number"
                     value={estimatedCost}
-                    onChange={(e) => setEstimatedCost(e.target.value)}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setEstimatedCost(isNaN(val) ? "" : String(Math.max(0, val)));
+                    }}
                     className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 dark:bg-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="0"
                     min="0"
@@ -255,7 +323,10 @@ export function RepairDetail() {
                   <input
                     type="number"
                     value={finalCost}
-                    onChange={(e) => setFinalCost(e.target.value)}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setFinalCost(isNaN(val) ? "" : String(Math.max(0, val)));
+                    }}
                     className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 dark:bg-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="0"
                     min="0"
@@ -336,22 +407,46 @@ export function RepairDetail() {
           </div>
         )}
 
+        {!isMechanic && (repair.estimatedCost != null || repair.finalCost != null) && (
+          <div className="bg-white dark:bg-neutral-800 p-6 rounded-xl border border-neutral-200 dark:border-neutral-700">
+            <h3 className="text-lg font-semibold text-neutral-900 dark:text-white mb-4">Koszty naprawy</h3>
+            <div className="grid grid-cols-2 gap-4">
+              {repair.estimatedCost != null && (
+                <div>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium">Szacowany koszt</p>
+                  <p className="text-2xl font-semibold text-neutral-900 dark:text-white mt-1">
+                    {Number(repair.estimatedCost).toFixed(2)} zł
+                  </p>
+                </div>
+              )}
+              {repair.finalCost != null && (
+                <div>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium">Finalny koszt</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+                    {Number(repair.finalCost).toFixed(2)} zł
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {!isMechanic && repair.mechanicNotes && (
-          <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
-            <h3 className="text-sm font-semibold text-blue-900 mb-2">Notatki mechanika</h3>
-            <p className="text-blue-800">{repair.mechanicNotes}</p>
+          <div className="bg-blue-50 dark:bg-blue-900/30 p-6 rounded-xl border border-blue-200 dark:border-blue-800/50">
+            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">Notatki mechanika</h3>
+            <p className="text-blue-800 dark:text-blue-200 leading-relaxed">{repair.mechanicNotes}</p>
           </div>
         )}
 
         {!isMechanic && repair.additionalIssues && (
-          <div className="bg-orange-50 p-6 rounded-xl border border-orange-200">
+          <div className="bg-orange-50 dark:bg-orange-900/30 p-6 rounded-xl border border-orange-200 dark:border-orange-800/50">
             <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-sm font-semibold text-orange-900 mb-2">
+                <h3 className="text-sm font-semibold text-orange-900 dark:text-orange-100 mb-2">
                   Dodatkowe usterki wykryte podczas przeglądu
                 </h3>
-                <p className="text-orange-800">{repair.additionalIssues}</p>
+                <p className="text-orange-800 dark:text-orange-200 leading-relaxed">{repair.additionalIssues}</p>
               </div>
             </div>
           </div>
@@ -367,18 +462,19 @@ export function RepairDetail() {
             {messages.length === 0 ? (
               <p className="text-sm text-neutral-500 text-center py-4">Brak wiadomości</p>
             ) : (
-              messages.map((msg) => {
-                const sender = getUsers().find((u) => u.id === msg.senderId);
+              messages.map((msg: any) => {
                 const isCurrentUser = msg.senderId === user?.id;
                 return (
                   <div
-                    key={msg.id}
+                    key={msg._id || msg.id}
                     className={`p-3 rounded-lg ${
                       isCurrentUser ? "bg-blue-50 dark:bg-blue-900 ml-8" : "bg-neutral-50 dark:bg-neutral-700 mr-8"
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-medium text-neutral-900 dark:text-white">{sender?.name}</p>
+                      <p className="text-sm font-medium text-neutral-900 dark:text-white">
+                        {isCurrentUser ? user?.name : (msg.senderRole === "mechanic" ? "Mechanik" : "Klient")}
+                      </p>
                       <span className="text-xs text-neutral-500">
                         {msg.senderRole === "mechanic" ? "Mechanik" : "Klient"}
                       </span>
@@ -414,3 +510,4 @@ export function RepairDetail() {
     </div>
   );
 }
+

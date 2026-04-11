@@ -7,9 +7,10 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 router.use(requireAuth);
 
 router.get('/', reportController.getReports);
+router.get('/:id', reportController.getReportById);
 router.post('/', validateReport, reportController.addReport);
 router.put('/:id/status', validateStatusUpdate, reportController.updateStatus);
-router.post('/:id/issues', validateAdditionalIssue, reportController.addAdditionalIssue);
-router.put('/:id/issues/:issueId/respond', reportController.respondToIssue);
+router.put('/:id/details', reportController.updateDetails);
+router.post('/:id/messages', reportController.addMessage);
 
 module.exports = router;

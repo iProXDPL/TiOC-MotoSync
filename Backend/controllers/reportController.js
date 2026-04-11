@@ -11,6 +11,17 @@ exports.getReports = async (req, res) => {
   }
 };
 
+exports.getReportById = async (req, res) => {
+  try {
+    const query = req.userRole === 'mechanic' ? { _id: req.params.id } : { _id: req.params.id, userId: req.userId };
+    const report = await Report.findOne(query).populate('carId');
+    if (!report) return res.status(404).json({ error: 'Zgłoszenie nie znalezione' });
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 exports.addReport = async (req, res) => {
   try {
     const carQuery = req.userRole === 'mechanic' ? { _id: req.body.carId } : { _id: req.body.carId, userId: req.userId };
@@ -28,19 +39,44 @@ exports.addReport = async (req, res) => {
 
 exports.updateStatus = async (req, res) => {
   try {
+    // Klient może tylko zaakceptować lub odrzucić naprawę w statusie awaiting_approval
     if (req.userRole !== 'mechanic') {
-      return res.status(403).json({ error: 'Tylko mechanik może aktualizować statusy naprawy' });
+      const report = await Report.findById(req.params.id);
+      if (!report) return res.status(404).json({ error: 'Zgłoszenie nie znalezione' });
+
+      const isOwner = report.userId === req.userId;
+      const isAwaitingApproval = report.status === 'awaiting_approval';
+      const allowedClientStatuses = ['in_progress', 'cancelled'];
+
+      if (!isOwner || !isAwaitingApproval || !allowedClientStatuses.includes(req.body.status)) {
+        return res.status(403).json({ error: 'Brak uprawnień do zmiany statusu' });
+      }
     }
 
     const updateFields = { status: req.body.status };
     if (req.body.mechanicNotes !== undefined) {
       updateFields.mechanicNotes = req.body.mechanicNotes;
     }
+    if (req.body.additionalIssues !== undefined) {
+      updateFields.additionalIssues = req.body.additionalIssues;
+    }
+    if (req.body.scheduledDate !== undefined) {
+      updateFields.scheduledDate = req.body.scheduledDate;
+    }
+    if (req.body.estimatedCost !== undefined) {
+      updateFields.estimatedCost = req.body.estimatedCost;
+    }
+    if (req.body.finalCost !== undefined) {
+      updateFields.finalCost = req.body.finalCost;
+    }
+    if (req.body.completedDate !== undefined) {
+      updateFields.completedDate = req.body.completedDate;
+    }
 
     const report = await Report.findByIdAndUpdate(
       req.params.id,
       updateFields,
-      { new: true }
+      { returnDocument: 'after' }
     ).populate('carId');
     if (!report) return res.status(404).json({ error: 'Zgłoszenie nie znalezione' });
     res.json(report);
@@ -49,53 +85,48 @@ exports.updateStatus = async (req, res) => {
   }
 };
 
-exports.addAdditionalIssue = async (req, res) => {
-    try {
-        if (req.userRole !== 'mechanic') {
-            return res.status(403).json({ error: 'Tylko mechanik może dodawać dodatkowe wyceny usterek' });
-        }
-        
-        const report = await Report.findById(req.params.id).populate('carId');
-        if(!report) return res.status(404).json({ error: 'Zgłoszenie nie znalezione' });
-        
-        report.additionalIssues.push({
-            description: req.body.description,
-            estimatedCost: req.body.estimatedCost
-        });
-        report.status = 'Oczekuje na akceptację';
-        await report.save();
-        res.json(report);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+exports.updateDetails = async (req, res) => {
+  try {
+    if (req.userRole !== 'mechanic') {
+      return res.status(403).json({ error: 'Tylko mechanik może aktualizować szczegóły naprawy' });
     }
+
+    const updateFields = {};
+    if (req.body.mechanicNotes !== undefined) updateFields.mechanicNotes = req.body.mechanicNotes;
+    if (req.body.additionalIssues !== undefined) updateFields.additionalIssues = req.body.additionalIssues;
+    if (req.body.scheduledDate !== undefined) updateFields.scheduledDate = req.body.scheduledDate;
+    if (req.body.estimatedCost !== undefined) updateFields.estimatedCost = req.body.estimatedCost;
+    if (req.body.finalCost !== undefined) updateFields.finalCost = req.body.finalCost;
+
+    const report = await Report.findByIdAndUpdate(
+      req.params.id,
+      updateFields,
+      { returnDocument: 'after' }
+    ).populate('carId');
+    
+    if (!report) return res.status(404).json({ error: 'Zgłoszenie nie znalezione' });
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
-exports.respondToIssue = async (req, res) => {
-    try {
-        // Tylko właściciel pojazdu może odpowiedzieć (mechanik może pomóc testowo)
-        const query = req.userRole === 'mechanic' ? { _id: req.params.id } : { _id: req.params.id, userId: req.userId };
-        const report = await Report.findOne(query).populate('carId');
-        if(!report) return res.status(404).json({ error: 'Zgłoszenie nie znalezione lub brak uprawnień' });
+exports.addMessage = async (req, res) => {
+  try {
+    const query = req.userRole === 'mechanic' ? { _id: req.params.id } : { _id: req.params.id, userId: req.userId };
+    const report = await Report.findOne(query);
+    
+    if (!report) return res.status(404).json({ error: 'Zgłoszenie nie znalezione' });
 
-        const issue = report.additionalIssues.id(req.params.issueId);
-        if(!issue) return res.status(404).json({ error: 'Dodatkowa wada nie znaleziona' });
+    report.messages.push({
+      senderId: req.userId,
+      senderRole: req.userRole,
+      content: req.body.content
+    });
 
-        issue.isAccepted = req.body.isAccepted; // boolean z body np {"isAccepted": true}
-        
-        // Dodaj do kosztu jeśli zaakceptowane
-        if(issue.isAccepted) {
-            report.totalCost += issue.estimatedCost;
-        }
-
-        // Sprawdź czy wszystkie issues zostały już zdefiniowane
-        const allResolved = report.additionalIssues.every(i => i.isAccepted !== null);
-        if(allResolved) {
-            report.status = 'W trakcie';
-        }
-
-        await report.save();
-        res.json(report);
-    } catch (error) {
-         res.status(500).json({ error: error.message });
-    }
+    await report.save();
+    res.status(201).json(report.messages[report.messages.length - 1]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };

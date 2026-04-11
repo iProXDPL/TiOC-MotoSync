@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
-import { getRepairs, getVehicles, saveRepair } from "../utils/storage";
 import { useAppUser } from "../hooks/useAppUser";
+import { useApi } from "../hooks/useApi";
 import { Repair, RepairStatus } from "../types";
 import { Clock, CheckCircle, AlertCircle, Wrench, Search } from "lucide-react";
 
@@ -33,6 +33,8 @@ export function MechanicDashboard() {
   const [sortBy, setSortBy] = useState<"newest" | "oldest">("newest");
   const user = useAppUser();
 
+  const api = useApi();
+
   useEffect(() => {
     if (!user || user.role !== "mechanic") {
       navigate("/");
@@ -42,19 +44,35 @@ export function MechanicDashboard() {
     loadRepairs();
   }, [user, navigate]);
 
-  const loadRepairs = () => {
-    setRepairs(getRepairs());
+  const loadRepairs = async () => {
+    try {
+      const data = await api.get('/reports');
+      const mappedRepairs = data.map((report: any) => ({
+        id: report._id,
+        vehicleBrand: report.carId?.make,
+        vehicleModel: report.carId?.model,
+        vehicleLicensePlate: report.carId?.licensePlate,
+        vehicleVin: report.carId?.vin,
+        status: report.status,
+        description: report.description,
+        createdAt: report.createdAt,
+        scheduledDate: report.scheduledDate,
+      }));
+      setRepairs(mappedRepairs);
+    } catch (err) {
+      console.error("Failed to load repairs for mechanic:", err);
+    }
   };
 
-  const handleConfirm = (repair: Repair) => {
-    const updated = {
-      ...repair,
-      status: "confirmed" as RepairStatus,
-      mechanicId: user?.id,
-      updatedAt: new Date().toISOString(),
-    };
-    saveRepair(updated);
-    loadRepairs();
+  const handleConfirm = async (repair: any) => {
+    try {
+      await api.put(`/reports/${repair.id}/status`, {
+        status: "confirmed"
+      });
+      loadRepairs();
+    } catch (err) {
+      console.error("Failed to confirm repair", err);
+    }
   };
 
   const pendingRepairs = repairs.filter((r) => r.status === "pending");
@@ -62,15 +80,14 @@ export function MechanicDashboard() {
   const inProgressRepairs = repairs.filter((r) => r.status === "in_progress");
 
   const filteredAndSortedRepairs = repairs
-    .filter((repair) => {
-      const vehicle = getVehicles().find((v) => v.id === repair.vehicleId);
+    .filter((repair: any) => {
       const searchLower = searchQuery.toLowerCase();
       
       const matchesSearch = 
         !searchQuery ||
-        vehicle?.brand.toLowerCase().includes(searchLower) ||
-        vehicle?.model.toLowerCase().includes(searchLower) ||
-        vehicle?.licensePlate.toLowerCase().includes(searchLower) ||
+        (repair.vehicleBrand && repair.vehicleBrand.toLowerCase().includes(searchLower)) ||
+        (repair.vehicleModel && repair.vehicleModel.toLowerCase().includes(searchLower)) ||
+        (repair.vehicleLicensePlate && repair.vehicleLicensePlate.toLowerCase().includes(searchLower)) ||
         new Date(repair.createdAt).toLocaleDateString("pl-PL").includes(searchLower) ||
         repair.description.toLowerCase().includes(searchLower);
 
@@ -146,8 +163,7 @@ export function MechanicDashboard() {
               Nowe zgłoszenia ({pendingRepairs.length})
             </h3>
             <div className="space-y-3">
-              {pendingRepairs.map((repair) => {
-                const vehicle = getVehicles().find((v) => v.id === repair.vehicleId);
+              {pendingRepairs.map((repair: any) => {
                 return (
                   <div
                     key={repair.id}
@@ -157,19 +173,21 @@ export function MechanicDashboard() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <p className="font-medium text-neutral-900 dark:text-white">
-                            {vehicle?.brand} {vehicle?.model}
+                            {repair.vehicleBrand} {repair.vehicleModel}
                           </p>
-                          <span className={`px-2 py-1 text-xs font-medium rounded ${statusColors[repair.status]}`}>
-                            {statusLabels[repair.status]}
+                          <span className={`px-2 py-1 text-xs font-medium rounded ${statusColors[repair.status as RepairStatus] || "bg-gray-100 text-gray-800"}`}>
+                            {statusLabels[repair.status as RepairStatus] || repair.status}
                           </span>
                         </div>
                         <p className="text-sm text-neutral-600 dark:text-neutral-400 dark:group-hover:text-neutral-200 mb-1">
-                          {vehicle?.licensePlate} • VIN: {vehicle?.vin}
+                          {repair.vehicleLicensePlate} • VIN: {repair.vehicleVin}
                         </p>
                         <p className="text-sm text-neutral-700 dark:text-neutral-300 dark:group-hover:text-white mb-2">{repair.description}</p>
-                        <p className="text-xs text-neutral-500">
-                          Preferowany termin: {new Date(repair.requestedDate).toLocaleDateString("pl-PL")}
-                        </p>
+                        {repair.scheduledDate && (
+                          <p className="text-xs text-neutral-500">
+                            Preferowany termin: {new Date(repair.scheduledDate).toLocaleDateString("pl-PL")}
+                          </p>
+                        )}
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -236,8 +254,7 @@ export function MechanicDashboard() {
                 <p>Brak zleceń</p>
               </div>
             ) : (
-              filteredAndSortedRepairs.map((repair) => {
-                const vehicle = getVehicles().find((v) => v.id === repair.vehicleId);
+              filteredAndSortedRepairs.map((repair: any) => {
                 return (
                   <div
                     key={repair.id}
@@ -248,10 +265,10 @@ export function MechanicDashboard() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <p className="font-medium text-neutral-900 dark:text-white">
-                            {vehicle?.brand} {vehicle?.model}
+                            {repair.vehicleBrand} {repair.vehicleModel}
                           </p>
-                          <span className={`px-2 py-1 text-xs font-medium rounded ${statusColors[repair.status]}`}>
-                            {statusLabels[repair.status]}
+                          <span className={`px-2 py-1 text-xs font-medium rounded ${statusColors[repair.status as RepairStatus] || "bg-gray-100 text-gray-800"}`}>
+                            {statusLabels[repair.status as RepairStatus] || repair.status}
                           </span>
                         </div>
                         <p className="text-sm text-neutral-600 dark:text-neutral-400 dark:group-hover:text-neutral-200 line-clamp-1">{repair.description}</p>

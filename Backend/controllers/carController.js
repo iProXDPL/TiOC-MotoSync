@@ -26,7 +26,7 @@ exports.updateCar = async (req, res) => {
     const car = await Car.findOneAndUpdate(
       query,
       req.body,
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!car) return res.status(404).json({ error: 'Nie znaleziono pojazdu lub brak uprawnień' });
     res.json(car);

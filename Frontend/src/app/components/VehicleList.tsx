@@ -1,13 +1,14 @@
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
-import { getVehicles, saveVehicle } from "../utils/storage";
 import { useAppUser } from "../hooks/useAppUser";
+import { useApi } from "../hooks/useApi";
 import { Vehicle } from "../types";
 import { Car, Plus, ArrowLeft } from "lucide-react";
 
 export function VehicleList() {
   const navigate = useNavigate();
   const user = useAppUser();
+  const api = useApi();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -27,28 +28,50 @@ export function VehicleList() {
     loadVehicles();
   }, [user, navigate]);
 
-  const loadVehicles = () => {
-    setVehicles(getVehicles(user?.id));
+  const loadVehicles = async () => {
+    try {
+      const data = await api.get('/cars');
+      const mappedVehicles = data.map((car: any) => ({
+        id: car._id,
+        userId: car.userId,
+        brand: car.make,
+        model: car.model,
+        year: car.year,
+        vin: car.vin,
+        licensePlate: car.licensePlate,
+        mileage: car.mileage || 0,
+      }));
+      setVehicles(mappedVehicles);
+    } catch (error) {
+      console.error("Failed to load vehicles:", error);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newVehicle: Vehicle = {
-      id: `vehicle-${Date.now()}`,
-      userId: user!.id,
-      ...formData,
-    };
-    saveVehicle(newVehicle);
-    setFormData({
-      brand: "",
-      model: "",
-      year: new Date().getFullYear(),
-      vin: "",
-      licensePlate: "",
-      mileage: 0,
-    });
-    setShowForm(false);
-    loadVehicles();
+    try {
+      await api.post('/cars', {
+        make: formData.brand,
+        model: formData.model,
+        year: formData.year,
+        vin: formData.vin,
+        licensePlate: formData.licensePlate,
+        mileage: formData.mileage,
+      });
+      setFormData({
+        brand: "",
+        model: "",
+        year: new Date().getFullYear(),
+        vin: "",
+        licensePlate: "",
+        mileage: 0,
+      });
+      setShowForm(false);
+      loadVehicles();
+    } catch (error) {
+      console.error("Failed to save vehicle:", error);
+      alert("Nie udało się dodać pojazdu. Spróbuj ponownie.");
+    }
   };
 
   return (

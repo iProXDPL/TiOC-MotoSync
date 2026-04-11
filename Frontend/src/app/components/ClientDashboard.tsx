@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
-import { getVehicles, getRepairs } from "../utils/storage";
 import { useAppUser } from "../hooks/useAppUser";
+import { useApi } from "../hooks/useApi";
 import { Vehicle, Repair, RepairStatus } from "../types";
 import { Car, Plus, Calendar, History, Clock, CheckCircle, AlertCircle } from "lucide-react";
 
@@ -30,6 +30,7 @@ export function ClientDashboard() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [repairs, setRepairs] = useState<Repair[]>([]);
   const user = useAppUser();
+  const api = useApi();
 
   useEffect(() => {
     if (!user || user.role !== "client") {
@@ -37,8 +38,43 @@ export function ClientDashboard() {
       return;
     }
 
-    setVehicles(getVehicles(user.id));
-    setRepairs(getRepairs({ userId: user.id }));
+    const fetchData = async () => {
+      try {
+        const [carsData, reportsData] = await Promise.all([
+          api.get('/cars'),
+          api.get('/reports')
+        ]);
+        
+        const mappedVehicles = carsData.map((car: any) => ({
+          id: car._id,
+          userId: car.userId,
+          brand: car.make,
+          model: car.model,
+          year: car.year,
+          vin: car.vin,
+          licensePlate: car.licensePlate,
+          mileage: car.mileage || 0,
+        }));
+        
+        const mappedRepairs = reportsData.map((report: any) => ({
+          id: report._id,
+          userId: report.userId || user.id,
+          vehicleId: report.carId,
+          status: report.status,
+          date: report.createdAt,
+          description: report.description,
+          cost: report.cost,
+          additionalIssues: report.additionalIssues || false,
+        }));
+
+        setVehicles(mappedVehicles);
+        setRepairs(mappedRepairs);
+      } catch (err) {
+        console.error("Failed to fetch dashboard data:", err);
+      }
+    };
+
+    fetchData();
   }, [user, navigate]);
 
   const activeRepairs = repairs.filter(
@@ -178,9 +214,9 @@ export function ClientDashboard() {
                       </span>
                     </div>
                     {repair.status === "awaiting_approval" && repair.additionalIssues && (
-                      <div className="mt-2 flex items-start gap-2 p-2 bg-orange-50 rounded text-sm">
-                        <AlertCircle className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
-                        <p className="text-orange-800">Wykryto dodatkowe usterki</p>
+                      <div className="mt-2 flex items-start gap-2 p-2 bg-orange-50 dark:bg-orange-900/30 rounded border border-orange-200 dark:border-orange-800/50 text-sm">
+                        <AlertCircle className="w-4 h-4 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+                        <p className="text-orange-800 dark:text-orange-200">Wykryto dodatkowe usterki — wymagana akceptacja</p>
                       </div>
                     )}
                   </div>

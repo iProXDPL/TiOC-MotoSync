@@ -7,6 +7,7 @@ const carSchema = new mongoose.Schema({
   year: { type: Number, required: true },
   vin: { type: String, required: false },
   licensePlate: { type: String, required: true },
+  mileage: { type: Number, required: false, default: 0 },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Car', carSchema);

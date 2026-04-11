@@ -26,7 +26,7 @@ const validateAdditionalIssue = [
 ];
 
 const validateStatusUpdate = [
-  body('status').isIn(['Oczekujące', 'Przyjęte', 'W trakcie', 'Oczekuje na akceptację', 'Gotowe do odbioru', 'Odebrane']).withMessage('Nieprawidłowy status'),
+  body('status').isIn(['pending', 'confirmed', 'in_progress', 'awaiting_approval', 'ready', 'completed', 'cancelled']).withMessage('Nieprawidłowy status'),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

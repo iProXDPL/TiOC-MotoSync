@@ -1,14 +1,15 @@
 import { useNavigate, useLocation } from "react-router";
 import { useState, useEffect } from "react";
-import { getVehicles, saveRepair } from "../utils/storage";
 import { useAppUser } from "../hooks/useAppUser";
-import { Vehicle, Repair } from "../types";
+import { useApi } from "../hooks/useApi";
+import { Vehicle } from "../types";
 import { ArrowLeft, Calendar } from "lucide-react";
 
 export function BookingForm() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAppUser();
+  const api = useApi();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [description, setDescription] = useState("");
@@ -20,41 +21,54 @@ export function BookingForm() {
       return;
     }
 
-    const userVehicles = getVehicles(user.id);
-    setVehicles(userVehicles);
+    const fetchVehicles = async () => {
+      try {
+        const data = await api.get('/cars');
+        const userVehicles = data.map((car: any) => ({
+          id: car._id,
+          userId: car.userId,
+          brand: car.make,
+          model: car.model,
+          licensePlate: car.licensePlate
+        }));
+        setVehicles(userVehicles);
 
-    const preselectedVehicleId = location.state?.vehicleId;
-    if (preselectedVehicleId) {
-      setSelectedVehicleId(preselectedVehicleId);
-    } else if (userVehicles.length > 0) {
-      setSelectedVehicleId(userVehicles[0].id);
-    }
+        const preselectedVehicleId = location.state?.vehicleId;
+        if (preselectedVehicleId) {
+          setSelectedVehicleId(preselectedVehicleId);
+        } else if (userVehicles.length > 0) {
+          setSelectedVehicleId(userVehicles[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to load vehicles for booking", err);
+      }
+    };
+    
+    fetchVehicles();
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     setRequestedDate(tomorrow.toISOString().split("T")[0]);
   }, [user, navigate, location.state]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedVehicleId || !description || !requestedDate) {
       return;
     }
 
-    const newRepair: Repair = {
-      id: `repair-${Date.now()}`,
-      vehicleId: selectedVehicleId,
-      userId: user!.id,
-      status: "pending",
-      description,
-      requestedDate,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    saveRepair(newRepair);
-    navigate("/client");
+    try {
+      await api.post('/reports', {
+        carId: selectedVehicleId,
+        description,
+        scheduledDate: requestedDate,
+      });
+      navigate("/client");
+    } catch (err) {
+      console.error("Booking error:", err);
+      alert("Wystąpił błąd podczas dodawania zgłoszenia.");
+    }
   };
 
   if (vehicles.length === 0) {

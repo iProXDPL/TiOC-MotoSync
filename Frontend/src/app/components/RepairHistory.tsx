@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
-import { getRepairs, getVehicles } from "../utils/storage";
 import { useAppUser } from "../hooks/useAppUser";
+import { useApi } from "../hooks/useApi";
 import { Repair, RepairStatus } from "../types";
 import { ArrowLeft, History } from "lucide-react";
 
@@ -30,13 +30,37 @@ export function RepairHistory() {
   const user = useAppUser();
   const [repairs, setRepairs] = useState<Repair[]>([]);
 
+  const api = useApi();
+
   useEffect(() => {
     if (!user || user.role !== "client") {
       navigate("/");
       return;
     }
 
-    setRepairs(getRepairs({ userId: user.id }));
+    const fetchHistory = async () => {
+      try {
+        const reportsData = await api.get('/reports');
+        const mappedRepairs = reportsData.map((report: any) => ({
+          id: report._id,
+          userId: report.userId || user.id,
+          vehicleId: report.carId?._id,
+          vehicleBrand: report.carId?.make,
+          vehicleModel: report.carId?.model,
+          status: report.status,
+          createdAt: report.createdAt,
+          description: report.description,
+          finalCost: report.totalCost,
+          scheduledDate: report.scheduledDate,
+          completedDate: report.status === 'completed' || report.status === 'Odebrane' ? report.updatedAt : undefined,
+        }));
+        setRepairs(mappedRepairs);
+      } catch (err) {
+        console.error("Failed to load history", err);
+      }
+    };
+
+    fetchHistory();
   }, [user, navigate]);
 
   return (
@@ -62,8 +86,7 @@ export function RepairHistory() {
         </div>
       ) : (
         <div className="space-y-4">
-          {repairs.map((repair) => {
-            const vehicle = getVehicles().find((v) => v.id === repair.vehicleId);
+          {repairs.map((repair: any) => {
             return (
               <div
                 key={repair.id}
@@ -74,11 +97,11 @@ export function RepairHistory() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
-                        {vehicle?.brand} {vehicle?.model}
+                        {repair.vehicleBrand} {repair.vehicleModel}
                       </h3>
                       <span
                         className={`px-2 py-1 text-xs font-medium rounded ${
-                          statusColors[repair.status]
+                          statusColors[repair.status as RepairStatus] || "bg-gray-100 text-gray-800"
                         }`}
                       >
                         {statusLabels[repair.status]}
