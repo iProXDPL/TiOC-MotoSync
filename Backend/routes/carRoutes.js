@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const carController = require('../controllers/carController');
 const { validateCar } = require('../validators/carValidator');
-const requireAuth = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 
 router.use(requireAuth);
 

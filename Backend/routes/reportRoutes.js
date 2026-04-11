@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const reportController = require('../controllers/reportController');
 const { validateReport, validateAdditionalIssue, validateStatusUpdate } = require('../validators/reportValidator');
-const requireAuth = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 
 router.use(requireAuth);
 
