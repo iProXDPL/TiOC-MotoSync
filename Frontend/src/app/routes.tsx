@@ -49,6 +49,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <SelectRole /> },
       { path: "sign-in/*", Component: SignIn },
+      { path: "sign-in/factor-one", Component: SignIn },
       { path: "sign-up/*", Component: SignUp },
       { path: "select-role", Component: SelectRole },
       {
