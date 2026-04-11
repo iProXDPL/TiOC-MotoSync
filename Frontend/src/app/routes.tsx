@@ -101,4 +101,8 @@ export const router = createBrowserRouter([
       },
     ],
   },
+  {
+    path: "/index.html",
+    element: <Navigate to="/" replace />,
+  },
 ]);
